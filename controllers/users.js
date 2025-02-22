@@ -47,15 +47,15 @@ const createUser = async (req, res) => {
   
     // Store user in 'database'
     reqBody.password = hashedPassword;
-    const { firstName, lastName, phoneNumber, email, password } = req.body;
+    const { firstName, lastName, phoneNumber, email, password, profile_image, source } = req.body;
     const query = `
       INSERT INTO users."users" 
-      (first_name, last_name, phone, email, password_history) 
-      VALUES ($1, $2, $3, $4, $5) 
+      (first_name, last_name, phone, email, password_history, profile_image, source) 
+      VALUES ($1, $2, $3, $4, $5, $6, $7) 
       RETURNING *;
     `;
 
-    const values = [firstName, lastName, phoneNumber, email, [password]];
+    const values = [firstName, lastName, phoneNumber, email, [password], profile_image, source];
     const newUser = await db.query(query, values);
   
     res.status(201).json({ data: newUser, message: 'User created successfully' });
@@ -105,8 +105,40 @@ const updateUserData = async (req, res) => {
     res.status(201).json({ data: newUser, message: 'User updated successfully' });
 }
 
+function generatePassword(length = 12) {
+  const chars =
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*()";
+  let password = "";
+  for (let i = 0; i < length; i++) {
+    password += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return password;
+}
+
+const generateTokenForSocialLogins = async (req, res) => {
+  const {email} = req.body;
+  const result = await db.query("SELECT * FROM users.users where email = $1", [email]);
+  if(result.rows.length === 0) {
+    req.body.phoneNumber = -1;
+    req.body.firstName = req.body.given_name;
+    req.body.lastName = req.body.family_name,
+    req.body.password = btoa(generatePassword(8));
+    req.body.profile_image = req.body.picture;
+    req.body.source = 'GOOGLE';
+
+    createUser(req, res);
+    return;
+  }else{
+    req.body.phoneNumber = req.body.email;
+    req.body.password = btoa(result.rows[0].password_history[result.rows[0].password_history.length - 1]);
+    login(req, res);
+    return;
+  }
+}
+
 module.exports.createUser = createUser;
 module.exports.login = login;
 module.exports.fetchCurrentUser = fetchCurrentUser;
 module.exports.refreshToken = refreshToken;
 module.exports.updateUserData = updateUserData;
+module.exports.generateTokenForSocialLogins = generateTokenForSocialLogins;
