@@ -120,7 +120,7 @@ const generateTokenForSocialLogins = async (req, res) => {
   const result = await db.query("SELECT * FROM users.users where email = $1", [email]);
   if(result.rows.length === 0) {
     req.body.phoneNumber = -1;
-    req.body.firstName = req.body.given_name;
+    req.body.firstName = req.body.given_name || req.body.name;
     req.body.lastName = req.body.family_name,
     req.body.password = btoa(generatePassword(8));
     req.body.profile_image = req.body.picture;
