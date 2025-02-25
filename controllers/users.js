@@ -47,7 +47,8 @@ const createUser = async (req, res) => {
   
     // Store user in 'database'
     reqBody.password = hashedPassword;
-    const { firstName, lastName, phoneNumber, email, password, profile_image, source } = req.body;
+    reqBody.source = 'APP';
+    const { firstName, lastName, phoneNumber, email, password, profile_image, source } = reqBody;
     const query = `
       INSERT INTO users."users" 
       (first_name, last_name, phone, email, password_history, profile_image, source) 
