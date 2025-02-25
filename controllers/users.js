@@ -35,7 +35,7 @@ const fetchCurrentUser = async (req, res) => {
 
 const createUser = async (req, res) => {
     const reqBody = req.body;
-    const result = await db.query("SELECT * FROM users.users where email = $1 or phone = $2 ", [reqBody.email, reqBody.phoneNumber]);
+    const result = await db.query("SELECT * FROM users.users where email = $1 or (phone = $2 and phone != -1)", [reqBody.email, reqBody.phoneNumber]);
      
     // Check if user already exists
     if (result.rows.length > 0) {
@@ -59,7 +59,7 @@ const createUser = async (req, res) => {
     const values = [firstName, lastName, phoneNumber, email, [password], profile_image, source];
     const newUser = await db.query(query, values);
   
-    res.status(201).json({ data: newUser, message: 'User created successfully' });
+    res.status(201).json({ data: newUser ? newUser.rows : [{}], message: 'User created successfully' });
 }
 
 const refreshToken = async (req, res) => {
@@ -130,9 +130,14 @@ const generateTokenForSocialLogins = async (req, res) => {
     createUser(req, res);
     return;
   }else{
-    req.body.phoneNumber = req.body.email;
-    req.body.password = btoa(result.rows[0].password_history[result.rows[0].password_history.length - 1]);
-    login(req, res);
+    
+    let user = result.rows[0];
+    // Generate Access and Refresh Tokens
+    const accessToken = jwtUtils.generateAccessToken(user);
+    const refreshToken = jwtUtils.generateRefreshToken(user);
+  
+    res.json({ accessToken, refreshToken, expiry: new Date().setMinutes(new Date().getMinutes() + parseInt(process.env.JWT_ACCESS_TOKEN_EXPIRATION.replace('m','') )) });
+
     return;
   }
 }
