@@ -142,9 +142,50 @@ const generateTokenForSocialLogins = async (req, res) => {
   }
 }
 
+const fetchUserStat = async (req, res) => {
+  const result = await db.query(`select jsonb_build_object( 'posts', (select count(1) from posts.posts p where created_by = $1), 
+'followers', (select count(1) from users.followers f where f.follower_id  = $1),
+'followings', (select array_agg(f.follower_id)  from users.followers f where f.user_id = $1)
+) as stats
+`, [req.user.user_id]);
+  if(result.rows.length === 0) {
+      return res.status(400).json({ message: 'Unable to find your account..' });
+  }
+  let user = result.rows[0];
+  
+  res.json(user);
+}
+
+const updateFollowers = async (req, res) => {
+  const {follower_id} = req.body;
+  
+  const result = await db.query("SELECT * FROM users.followers where user_id = $1 and is_active=true", [req.user.user_id]);
+  let newFollower;
+  if(result.rows.length === 0) {
+    const query = `
+      INSERT INTO users."followers" (user_id, follower_id) 
+      VALUES ($1, $2) RETURNING *;
+    `;
+    const values = [req.user.user_id, follower_id];
+    newFollower = await db.query(query, values);
+  }else{
+    const query = `
+      UPDATE users."followers" 
+      set is_active = false where user_id = $1 and follower_id = $2
+      RETURNING *;
+    `;
+    const values = [req.user.user_id, follower_id];
+    newFollower = await db.query(query, values);
+  }
+
+  res.status(201).json({ data: newFollower, message: 'Follower updated successfully' });
+}
+
 module.exports.createUser = createUser;
 module.exports.login = login;
 module.exports.fetchCurrentUser = fetchCurrentUser;
 module.exports.refreshToken = refreshToken;
 module.exports.updateUserData = updateUserData;
 module.exports.generateTokenForSocialLogins = generateTokenForSocialLogins;
+module.exports.fetchUserStat = fetchUserStat;
+module.exports.updateFollowers = updateFollowers;

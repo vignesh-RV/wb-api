@@ -18,11 +18,11 @@ const savePost = async (req, res) => {
 // Save a comment
 const saveComment = async (req, res) => {
   try {
-    const { post_id, content, parent_comment_id, created_by } = req.body;
+    const { post_id, content, parent_comment_id } = req.body;
     const result = await db.query(
       `INSERT INTO posts.comments (post_id, content, parent_comment_id, created_by) 
        VALUES ($1, $2, $3, $4) RETURNING *`,
-      [post_id, content, parent_comment_id, created_by]
+      [post_id, content, parent_comment_id, req.user.user_id]
     );
     res.status(201).json(result.rows[0]);
   } catch (error) {
@@ -37,7 +37,7 @@ const buildTree = (comments, parentId = null) => {
     .filter(comment => comment.parent_comment_id === parentId)
     .map(comment => ({
       ...comment,
-      replies: buildTree(comments, comment.comment_id)
+      comments: buildTree(comments, comment.comment_id)
     }));
 };
 
@@ -45,10 +45,29 @@ const buildTree = (comments, parentId = null) => {
 const fetchAllPosts = async (req, res) => {
   try {
     const result = await db.query(
-      `SELECT p.*, p.created_date as "createdDate", jsonb_build_object( 'firstName', u.first_name, 'lastName', u.last_name, 'email', u.email, 'phoneNumber', u.phone, 'profileImage', u.profile_image ) AS "postedBy" FROM posts.posts p JOIN users.users u ON u.user_id = p.created_by ORDER BY p.last_modified_date DESC`
+      `SELECT p.*, p.created_date as "createdDate",
+      (select count(1) from posts.comments c where c.post_id = p.post_id and c.parent_comment_id is null) as "commentCount",
+       jsonb_build_object( 'user_id', u.user_id, 'firstName', u.first_name, 'lastName', u.last_name, 'email', u.email, 'phoneNumber', u.phone, 'profileImage', u.profile_image ) AS "postedBy" FROM posts.posts p JOIN users.users u ON u.user_id = p.created_by ORDER BY p.last_modified_date DESC`
     );
     
     res.status(200).json(result.rows);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Internal Server Error' });
+  }
+}
+
+const fetchPostById = async (req, res) => {
+  try {
+    if(!req.params.post_id) return res.status(400).json({ message: 'Post ID is required' });
+
+    const result = await db.query(
+      `SELECT p.*, p.created_date as "createdDate",
+      (select count(1) from posts.comments c where c.post_id = p.post_id and c.parent_comment_id is null) as "commentCount",
+       jsonb_build_object( 'user_id', u.user_id, 'firstName', u.first_name, 'lastName', u.last_name, 'email', u.email, 'phoneNumber', u.phone, 'profileImage', u.profile_image ) AS "postedBy" FROM posts.posts p JOIN users.users u ON u.user_id = p.created_by WHERE p.post_id = $1 ORDER BY p.last_modified_date DESC`
+    ,[req.params.post_id]);
+    
+    res.status(200).json(result.rows && result.rows.length ? result.rows[0] : []);
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: 'Internal Server Error' });
@@ -60,7 +79,9 @@ const fetchComments = async (req, res) => {
   try {
     const { post_id } = req.params;
     const result = await db.query(
-      `SELECT * FROM posts.comments WHERE post_id = $1 ORDER BY created_date ASC`,
+      `SELECT c.* ,
+       jsonb_build_object( 'firstName', u.first_name, 'lastName', u.last_name, 'email', u.email, 'phoneNumber', u.phone, 'profileImage', u.profile_image ) AS "postedBy"
+        FROM posts.comments c JOIN users.users u ON u.user_id = c.created_by WHERE c.post_id = $1 ORDER BY c.created_date ASC`,
       [post_id]
     );
     
@@ -97,6 +118,7 @@ const updateVote = async (req, res) => {
 }
 
 module.exports.savePost = savePost;
+module.exports.fetchPostById = fetchPostById;
 module.exports.fetchAllPosts = fetchAllPosts;
 module.exports.saveComment = saveComment;
 module.exports.fetchComments = fetchComments;
