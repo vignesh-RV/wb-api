@@ -80,6 +80,7 @@ const fetchComments = async (req, res) => {
     const { post_id } = req.params;
     const result = await db.query(
       `SELECT c.* ,
+       c.created_date as "createdDate",
        jsonb_build_object( 'firstName', u.first_name, 'lastName', u.last_name, 'email', u.email, 'phoneNumber', u.phone, 'profileImage', u.profile_image ) AS "postedBy"
         FROM posts.comments c JOIN users.users u ON u.user_id = c.created_by WHERE c.post_id = $1 ORDER BY c.created_date ASC`,
       [post_id]
